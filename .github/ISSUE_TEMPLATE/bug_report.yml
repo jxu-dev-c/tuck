@@ -1,0 +1,40 @@
+name: Bug report
+description: Something in Tuck isn't working
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: e.g. 26.1 (25B78)
+    validations:
+      required: true
+  - type: input
+    id: tuck-version
+    attributes:
+      label: Tuck version
+      description: From `brew info --cask tuck`, or the commit if you built from source.
+  - type: textarea
+    id: displays
+    attributes:
+      label: Display setup
+      description: Built-in display (notched or not), external displays, and which one is main.
+    validations:
+      required: true
+  - type: textarea
+    id: items
+    attributes:
+      label: Menu bar items involved
+      description: The app name plus the row text Settings shows for each item.
+  - type: textarea
+    id: settings-message
+    attributes:
+      label: Settings message
+      description: If moving an item failed, what Settings displayed under the list.

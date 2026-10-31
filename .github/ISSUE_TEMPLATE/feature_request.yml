@@ -1,0 +1,17 @@
+name: Feature request
+description: Suggest an idea for Tuck
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: Tuck aims to stay small and light, so features that add dependencies, background polling or lots of settings are a hard sell. Tell us the problem first.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like Tuck to do?
