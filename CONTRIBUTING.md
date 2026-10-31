@@ -27,6 +27,8 @@ pkill -x Tuck; defaults delete com.jasonxu.tuck
 
 ## Pull requests
 
+CI runs on every PR. It builds with warnings treated as errors, assembles a universal app bundle, and lints the scripts and workflows with `shellcheck` and `actionlint`. Both checks must pass before merging.
+
 1. Keep each PR focused on one change.
 2. Describe how you tested it. For example: reveal and hide, clicking a revealed item, moving an item in Settings, relaunching. Include your macOS version and whether your MacBook has a notch.
 3. Include a screenshot for UI changes.
@@ -34,3 +36,30 @@ pkill -x Tuck; defaults delete com.jasonxu.tuck
 ## Reporting bugs
 
 Please include your macOS version, your display setup, and the items involved (app name plus the Settings row text). If moving an item failed, say what Settings displayed under the list.
+
+## Releasing (maintainers)
+
+Tag a commit on `main` and push the tag:
+
+```sh
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+The [release workflow](.github/workflows/release.yml) then:
+
+1. stamps the version from the tag into `Info.plist`,
+2. builds a universal `Tuck.app` and signs it with the "Tuck Release" identity,
+3. publishes a GitHub Release with `Tuck-<version>.zip` and generated notes,
+4. writes `Casks/tuck.rb` to [jxu-dev-c/homebrew-tap](https://github.com/jxu-dev-c/homebrew-tap) (rendered by `scripts/render-cask.sh`).
+
+To re-run a release, start the workflow manually from the Actions tab and give it the existing tag.
+
+It needs these repository secrets:
+
+| Secret | What it is |
+|---|---|
+| `SIGNING_CERT_P12` | base64 `.p12` of the self-signed "Tuck Release" identity |
+| `SIGNING_CERT_PASSWORD` | the `.p12` export password |
+| `HOMEBREW_TAP_TOKEN` | fine-grained PAT with Contents: read and write on `jxu-dev-c/homebrew-tap` |
+
+The "Tuck Release" identity is backed up in the maintainer's login keychain. Keep it: macOS ties permission grants to the signing certificate, so a new one would make every user re-grant Accessibility and Screen Recording once.

@@ -25,7 +25,21 @@
 
 ## Install
 
-There are no prebuilt releases yet, so build it from source:
+With [Homebrew](https://brew.sh):
+
+```sh
+brew install --cask jxu-dev-c/tap/tuck
+```
+
+Upgrade with `brew upgrade --cask tuck`. Every release is signed with the same identity, so macOS keeps your permission grants across upgrades.
+
+Prefer a manual install? Download `Tuck-<version>.zip` from [Releases](https://github.com/jxu-dev-c/tuck/releases), unzip it and move `Tuck.app` to `/Applications`. Tuck is self-signed rather than notarized, so clear the download quarantine before the first launch:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/Tuck.app
+```
+
+### Build from source
 
 ```sh
 git clone https://github.com/jxu-dev-c/tuck.git
