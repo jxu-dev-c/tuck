@@ -28,7 +28,7 @@ enum MenuBarItemScanner {
     private static func collect(_ apps: [AppInfo]) -> [MenuBarItem] {
         let results = ResultBox()
         DispatchQueue.concurrentPerform(iterations: apps.count) { index in
-            results.append(items(for: apps[index]))
+            autoreleasepool { results.append(items(for: apps[index])) }
         }
         return deduplicated(results.items).sorted { $0.frame.minX < $1.frame.minX }
     }

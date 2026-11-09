@@ -44,14 +44,15 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTa
     private let loginCheckbox = NSButton(checkboxWithTitle: "Launch Tuck at login", target: nil, action: nil)
     private let accessibilityStatus = NSTextField(labelWithString: "")
     private let accessibilityButton = NSButton(title: "Grant…", target: nil, action: nil)
-    private let screenRecordingStatus = NSTextField(labelWithString: "")
-    private let screenRecordingButton = NSButton(title: "Grant…", target: nil, action: nil)
 
     private var items: [MenuBarItem] = []
     private var rows: [Row] = []
-    private var images: [String: NSImage] = [:]
+    private var appIcons: [pid_t: NSImage] = [:]
+    private var operationTask: Task<Void, Never>?
     private var isBusy = false
+    private var isDragging = false
     private var isHolding = false
+    private var isClosing = false
 
     init(menuBar: MenuBarController, onClose: @escaping () -> Void) {
         self.menuBar = menuBar
@@ -73,6 +74,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTa
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
     func show() {
+        guard !isClosing else { return }
         if !isHolding {
             isHolding = true
             menuBar.beginHold()
@@ -97,11 +99,31 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTa
     }
 
     func windowWillClose(_ notification: Notification) {
-        if isHolding {
-            isHolding = false
-            menuBar.endHold()
-        }
+        isClosing = true
+        operationTask?.cancel()
+        items = []
+        rows = []
+        appIcons = [:]
+        table.reloadData()
+        // An in-flight drag must finish mouse-up before the bar can collapse.
+        if !isDragging { releaseHold() }
         onClose()
+    }
+
+    private func releaseHold() {
+        guard isHolding else { return }
+        isHolding = false
+        menuBar.endHold()
+    }
+
+    private func finishOperation() {
+        operationTask = nil
+        isBusy = false
+        if isClosing {
+            releaseHold()
+        } else {
+            refreshButton.isEnabled = true
+        }
     }
 
     // MARK: UI
@@ -162,11 +184,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTa
 
         accessibilityButton.target = self
         accessibilityButton.action = #selector(grantAccessibility)
-        screenRecordingButton.target = self
-        screenRecordingButton.action = #selector(grantScreenRecording)
         let permissions = NSGridView(views: [
             [Self.permissionLabel("Accessibility", detail: "required to list and move items"), accessibilityStatus, accessibilityButton],
-            [Self.permissionLabel("Screen Recording", detail: "optional, shows real icons here"), screenRecordingStatus, screenRecordingButton],
         ])
         permissions.rowSpacing = 8
         permissions.column(at: 1).xPlacement = .trailing
@@ -224,38 +243,58 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTa
         accessibilityStatus.stringValue = ax ? "Granted" : "Not granted"
         accessibilityStatus.textColor = ax ? .systemGreen : .systemOrange
         accessibilityButton.isHidden = ax
-
-        let sr = Permissions.hasScreenRecording
-        screenRecordingStatus.stringValue = sr ? "Granted" : "Not granted"
-        screenRecordingStatus.textColor = sr ? .systemGreen : .secondaryLabelColor
-        screenRecordingButton.isHidden = sr
     }
 
     // MARK: Data
 
     private func reload() {
+        // Multiple activation/refresh events share the current scan.
+        guard !isClosing, !isBusy else { return }
         guard Permissions.hasAccessibility else {
             items = []
-            images = [:]
+            appIcons = [:]
             rebuildRows()
+            statusLabel.stringValue = "Accessibility access required"
             return
         }
+        isBusy = true
+        refreshButton.isEnabled = false
         statusLabel.stringValue = "Reading menu bar…"
-        Task {
+        operationTask = Task { [weak self] in
+            guard let self else { return }
+            defer { finishOperation() }
             // Give the menu bar a moment to lay out after expanding.
-            try? await Task.sleep(for: .milliseconds(200))
-            await rescan()
+            do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
+            guard await rescan() else { return }
             statusLabel.stringValue = "\(items.count) items"
         }
     }
 
-    private func rescan() async {
-        items = await MenuBarItemScanner.scan().filter { !$0.isFixed }
+    private func rescan() async -> Bool {
+        guard !Task.isCancelled, !isClosing else { return false }
+        let scanned = await MenuBarItemScanner.scan()
+        guard !Task.isCancelled, !isClosing else { return false }
+        items = scanned.filter { !$0.isFixed }
+        let pids = Set(items.map(\.pid))
+        appIcons = appIcons.filter { pids.contains($0.key) }
+        for pid in pids where appIcons[pid] == nil {
+            appIcons[pid] = Self.appIcon(for: pid)
+        }
         rebuildRows()
-        let captured = await ItemImageCapture.images(for: items)
-        if !captured.isEmpty {
-            images = captured
-            table.reloadData()
+        return true
+    }
+
+    /// Rasterize once at row size, without retaining the app's full-size icon representations.
+    private static func appIcon(for pid: pid_t) -> NSImage? {
+        autoreleasepool {
+            guard let source = NSRunningApplication(processIdentifier: pid)?.icon else { return nil }
+            let size = NSSize(width: 20, height: 20)
+            let thumbnail = NSImage(size: size, flipped: false) { rect in
+                source.draw(in: rect)
+                return true
+            }
+            guard let cgImage = thumbnail.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+            return NSImage(cgImage: cgImage, size: size)
         }
     }
 
@@ -314,6 +353,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTa
     }
 
     private func move(_ item: MenuBarItem, to section: Section, index: Int) {
+        guard !isClosing, !isBusy else { return }
         let sameSpot = self.section(of: item) == section
             && items(in: section).firstIndex(where: { $0.id == item.id }).map { $0 == index || $0 + 1 == index } == true
         guard !sameSpot else { return }
@@ -321,15 +361,21 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTa
         isBusy = true
         refreshButton.isEnabled = false
         statusLabel.stringValue = "Moving \(item.title)…"
-        Task {
+        operationTask = Task { [weak self] in
+            guard let self else { return }
+            defer { finishOperation() }
             var current = item
             var landed = false
             for _ in 0..<2 {
+                guard !Task.isCancelled, !isClosing else { return }
                 menuBar.expand(autoRehide: false)
                 guard let placement = placement(for: current, in: section, at: index) else { break }
+                // ItemMover always completes mouse-up and restores the cursor, even if cancelled.
+                isDragging = true
                 await ItemMover.move(current, to: placement)
-                try? await Task.sleep(for: .milliseconds(350))
-                await rescan()
+                isDragging = false
+                do { try await Task.sleep(for: .milliseconds(350)) } catch { return }
+                guard await rescan() else { return }
                 guard let fresh = items.first(where: { $0.id == item.id }) else { break }
                 current = fresh
                 if self.section(of: fresh) == section {
@@ -340,8 +386,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTa
             statusLabel.stringValue = landed
                 ? "Moved \(item.title)"
                 : "Couldn't move \(item.title). Try ⌘-dragging it in the menu bar."
-            isBusy = false
-            refreshButton.isEnabled = true
         }
     }
 
@@ -367,7 +411,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTa
     }
 
     @objc private func grantAccessibility() { Permissions.requestAccessibility() }
-    @objc private func grantScreenRecording() { Permissions.requestScreenRecording() }
 
     // MARK: NSTableViewDataSource
 
@@ -387,7 +430,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTa
     }
 
     func tableView(_ tableView: NSTableView, acceptDrop info: NSDraggingInfo, row: Int, dropOperation: NSTableView.DropOperation) -> Bool {
-        guard let id = info.draggingPasteboard.string(forType: Self.dragType),
+        guard !isClosing, !isBusy,
+              let id = info.draggingPasteboard.string(forType: Self.dragType),
               let item = items.first(where: { $0.id == id }),
               let destination = destination(forRow: row) else { return false }
         move(item, to: destination.section, index: destination.index)
@@ -428,7 +472,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTa
         case .item(let item, _):
             let cell = itemCell(in: tableView)
             cell.textField?.stringValue = item.displayName
-            cell.imageView?.image = images[item.id] ?? NSRunningApplication(processIdentifier: item.pid)?.icon
+            cell.imageView?.image = appIcons[item.pid]
             return cell
         }
     }
