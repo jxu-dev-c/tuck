@@ -12,10 +12,9 @@ Tuck is a single Swift package with one executable target and no dependencies. I
 | `MenuBarItem.swift` | A value snapshot of one menu bar item (id, owner, title, frame) |
 | `MenuBarItemScanner.swift` | Lists every menu bar item through Accessibility |
 | `ItemMover.swift` | Moves an item with a synthetic ⌘-drag |
-| `ItemImageCapture.swift` | Optional real-icon thumbnails via ScreenCaptureKit |
 | `SettingsWindowController.swift` | Settings window: Shown/Hidden table with drag and drop, preferences, permissions |
 | `Settings.swift` | `UserDefaults` wrapper |
-| `Permissions.swift` | Accessibility and Screen Recording checks and requests |
+| `Permissions.swift` | Accessibility checks and requests |
 
 ## Hiding: the divider trick
 
@@ -25,8 +24,10 @@ Tuck is a single Swift package with one executable target and no dependencies. I
            divider  arrow
 ```
 
-- **Collapse:** set `divider.length = 10_000`. macOS lays status items out from the right, so a 10,000-point item pushes everything to its left off the screen.
+- **Collapse:** set `divider.length` to twice the widest connected display's width, bounded to 500–10,000 points (10,000 if no display is available). macOS lays status items out from the right, so the wide divider pushes everything to its left off the screen.
 - **Expand:** set `divider.length = NSStatusItem.variableLength`.
+
+A screen-parameters notification updates the length while collapsed, only when the calculated value changes. The two status items are created once, never recreated on refresh.
 
 Revealed items are the apps' own status items, so clicks, menus and popovers work as they normally would. No events are forwarded.
 
@@ -67,7 +68,11 @@ All coordinates use CoreGraphics global space (top-left origin), the same space 
 
 ## Staying light
 
-- No repeating timers, observers or polling. At idle the process sleeps in the run loop.
-- The Settings window, scan results and icon cache are created on demand and released when the window closes.
-- ScreenCaptureKit is only touched if Screen Recording was already granted.
+- No repeating timers or polling. One notification observer handles display changes; at idle the process sleeps in the run loop.
+- Settings holds one scan or move task at a time. Duplicate refreshes share the in-flight scan, and dragging is disabled while busy.
+- Closing Settings cancels its task, clears rows and icons, and discards late scan results. If a synthetic drag is in progress, its mouse-up and cursor restoration complete before the menu bar hold is released.
+- App icons are rasterized at row size and cached once per process for the window's lifetime. There is no screen capture or Screen Recording permission check.
+- Each concurrent Accessibility scan iteration drains its temporary Objective-C objects in an autorelease pool.
 - Release builds use `-O`, `-dead_strip` and `strip -x`.
+
+See [memory profiling](MEMORY.md) for measurements and validation limits.

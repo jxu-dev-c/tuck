@@ -16,7 +16,7 @@
 - **Choose what's hidden.** Settings lists every item under **Shown** and **Hidden**. Drag a row from one to the other and Tuck moves the real icon for you. You can also ⌘-drag icons past the thin `│` divider.
 - **Auto-hide.** Revealed items hide again after a delay you choose (5 s to 1 min, or never). Tuck waits while a menu is open or your pointer is in the menu bar.
 - **Launch at login.** One checkbox in Settings.
-- **Featherweight.** AppKit only, with no dependencies and no background polling. About 20 MB of memory, 0% CPU when idle, and a 216 KB app bundle.
+- **Lightweight.** AppKit only, with no dependencies, screen capture, or background polling. Settings resources are released when its window closes. See [memory profiling](docs/MEMORY.md) for measurements and test conditions.
 
 ## Requirements
 
@@ -68,11 +68,10 @@ Hidden items stay revealed while Settings is open, so you can watch your changes
 | Permission | Needed for | Required? |
 |---|---|---|
 | **Accessibility** | Listing items in Settings and moving them for you | Only for the Settings list. Hiding and revealing work without it. |
-| **Screen Recording** | Showing each item's real icon in Settings (instead of its app icon) | Optional |
 
-Grant either one from the **Permissions** section in Settings.
+Grant Accessibility from the **Permissions** section in Settings. The list uses app icons; Screen Recording access is not needed.
 
-> **Building from source?** macOS ties these grants to the app's code signature. Ad hoc builds get a new signature every time, so macOS forgets the grants after each rebuild. Run `scripts/make-dev-cert.sh` once to create a stable self-signed "Tuck Dev" identity. `build-app.sh` uses it automatically.
+> **Building from source?** macOS ties this grant to the app's code signature. Ad hoc builds get a new signature every time, so macOS forgets the grant after each rebuild. Run `scripts/make-dev-cert.sh` once to create a stable self-signed "Tuck Dev" identity. `build-app.sh` uses it automatically.
 
 ## Known limitations
 
@@ -83,7 +82,7 @@ Grant either one from the **Permissions** section in Settings.
 
 ## How it works
 
-Tuck adds two items of its own to the menu bar: a divider `│` and an arrow `‹`. To hide items, it widens the divider to 10,000 points, which pushes everything to its left off the screen. To reveal them, it shrinks the divider back. Nothing is ever redrawn or proxied, so revealed items behave exactly like normal ones.
+Tuck adds two items of its own to the menu bar: a divider `│` and an arrow `‹`. To hide items, it widens the divider based on the widest connected display, which pushes everything to its left off the screen. To reveal them, it shrinks the divider back. Nothing is ever redrawn or proxied, so revealed items behave exactly like normal ones.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the details, including how Settings reads and moves items on macOS 26.
 

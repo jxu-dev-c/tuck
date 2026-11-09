@@ -62,4 +62,4 @@ It needs these repository secrets:
 | `SIGNING_CERT_PASSWORD` | the `.p12` export password |
 | `HOMEBREW_TAP_TOKEN` | fine-grained PAT with Contents: read and write on `jxu-dev-c/homebrew-tap` |
 
-The "Tuck Release" identity is backed up in the maintainer's login keychain. Keep it: macOS ties permission grants to the signing certificate, so a new one would make every user re-grant Accessibility and Screen Recording once.
+The "Tuck Release" identity is backed up in the maintainer's login keychain. Keep it: macOS ties permission grants to the signing certificate, so a new one would make every user re-grant Accessibility once.

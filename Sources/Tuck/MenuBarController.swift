@@ -8,7 +8,10 @@ import AppKit
 final class MenuBarController {
     private static let arrowName = "TuckArrow"
     private static let dividerName = "TuckDivider"
-    private static let collapsedLength: CGFloat = 10_000
+    private static var collapsedLength: CGFloat {
+        guard let widest = NSScreen.screens.map(\.frame.width).max() else { return 10_000 }
+        return max(500, min(widest * 2, 10_000))
+    }
 
     private let arrow: NSStatusItem
     private let divider: NSStatusItem
@@ -49,6 +52,14 @@ final class MenuBarController {
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
         updateArrowImage()
+        NotificationCenter.default.addObserver(self, selector: #selector(screenParametersChanged),
+            name: NSApplication.didChangeScreenParametersNotification, object: nil)
+    }
+
+    @objc private func screenParametersChanged() {
+        guard isCollapsed else { return }
+        let length = Self.collapsedLength
+        if divider.length != length { divider.length = length }
     }
 
     func restoreSavedState() {
