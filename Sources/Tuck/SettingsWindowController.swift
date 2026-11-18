@@ -57,6 +57,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTa
     private let clearShortcutButton = NSButton(title: "Clear", target: nil, action: nil)
     private var isRecordingShortcut = false
     private var shortcutMonitor: Any?
+    private let outsideClickCheckbox = NSButton(checkboxWithTitle: "Hide immediately when clicking outside the menu bar", target: nil, action: nil)
 
     init(menuBar: MenuBarController, onClose: @escaping () -> Void) {
         self.menuBar = menuBar
@@ -196,8 +197,13 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTa
         let shortcutRow = NSStackView(views: [shortcutButton, clearShortcutButton])
         shortcutRow.spacing = 6
 
+        outsideClickCheckbox.target = self
+        outsideClickCheckbox.action = #selector(outsideClickToggled)
+        outsideClickCheckbox.state = Settings.rehideOnOutsideClick ? .on : .off
+
         let general = NSGridView(views: [
             [NSTextField(labelWithString: "Hide revealed items after:"), rehidePopup],
+            [NSGridCell.emptyContentView, outsideClickCheckbox],
             [NSTextField(labelWithString: "Toggle shortcut:"), shortcutRow],
             [NSGridCell.emptyContentView, loginCheckbox],
         ])
@@ -417,6 +423,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTa
 
     @objc private func rehideChanged() {
         Settings.autoRehideDelay = Self.rehideChoices[rehidePopup.indexOfSelectedItem].1
+    }
+
+    @objc private func outsideClickToggled() {
+        Settings.rehideOnOutsideClick = outsideClickCheckbox.state == .on
     }
 
     private func updateShortcutControls() {
