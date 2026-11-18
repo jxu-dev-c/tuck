@@ -90,6 +90,7 @@ final class MenuBarController {
     func expand(autoRehide: Bool) {
         if isCollapsed {
             divider.length = NSStatusItem.variableLength
+            divider.button?.superview?.isHidden = false
             divider.button?.image = Self.dividerImage
             isCollapsed = false
             Settings.isCollapsed = false
@@ -106,6 +107,7 @@ final class MenuBarController {
             return
         }
         divider.button?.image = nil
+        divider.button?.superview?.isHidden = true
         divider.length = Self.collapsedLength
         isCollapsed = true
         Settings.isCollapsed = true
