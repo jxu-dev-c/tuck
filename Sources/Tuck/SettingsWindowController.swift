@@ -53,6 +53,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTa
     private var isDragging = false
     private var isHolding = false
     private var isClosing = false
+    private let shortcutButton = NSButton(title: "Record Shortcut", target: nil, action: nil)
+    private let clearShortcutButton = NSButton(title: "Clear", target: nil, action: nil)
+    private var isRecordingShortcut = false
+    private var shortcutMonitor: Any?
 
     init(menuBar: MenuBarController, onClose: @escaping () -> Void) {
         self.menuBar = menuBar
@@ -100,6 +104,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTa
 
     func windowWillClose(_ notification: Notification) {
         isClosing = true
+        stopRecordingShortcut()
         operationTask?.cancel()
         items = []
         rows = []
@@ -175,8 +180,19 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTa
         loginCheckbox.action = #selector(loginToggled)
         loginCheckbox.state = SMAppService.mainApp.status == .enabled ? .on : .off
 
+        shortcutButton.target = self
+        shortcutButton.action = #selector(shortcutButtonClicked)
+        shortcutButton.setAccessibilityLabel("Toggle shortcut")
+        clearShortcutButton.target = self
+        clearShortcutButton.action = #selector(clearShortcutClicked)
+        clearShortcutButton.controlSize = .small
+        updateShortcutControls()
+        let shortcutRow = NSStackView(views: [shortcutButton, clearShortcutButton])
+        shortcutRow.spacing = 6
+
         let general = NSGridView(views: [
             [NSTextField(labelWithString: "Hide revealed items after:"), rehidePopup],
+            [NSTextField(labelWithString: "Toggle shortcut:"), shortcutRow],
             [NSGridCell.emptyContentView, loginCheckbox],
         ])
         general.rowSpacing = 8
@@ -395,6 +411,67 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTa
 
     @objc private func rehideChanged() {
         Settings.autoRehideDelay = Self.rehideChoices[rehidePopup.indexOfSelectedItem].1
+    }
+
+    private func updateShortcutControls() {
+        if isRecordingShortcut {
+            shortcutButton.title = "Type Shortcut…"
+            clearShortcutButton.isHidden = Settings.toggleShortcut == nil
+        } else if let shortcut = Settings.toggleShortcut {
+            shortcutButton.title = shortcut.displayString
+            clearShortcutButton.isHidden = false
+        } else {
+            shortcutButton.title = "Record Shortcut"
+            clearShortcutButton.isHidden = true
+        }
+    }
+
+    @objc private func shortcutButtonClicked() {
+        if isRecordingShortcut {
+            stopRecordingShortcut()
+        } else {
+            startRecordingShortcut()
+        }
+    }
+
+    @objc private func clearShortcutClicked() {
+        stopRecordingShortcut()
+        Settings.toggleShortcut = nil
+        updateShortcutControls()
+    }
+
+    private func startRecordingShortcut() {
+        guard !isRecordingShortcut else { return }
+        isRecordingShortcut = true
+        updateShortcutControls()
+        shortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            if event.keyCode == 53 {
+                self.stopRecordingShortcut()
+                return nil
+            }
+            if event.keyCode == 51 && event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty {
+                Settings.toggleShortcut = nil
+                self.stopRecordingShortcut()
+                return nil
+            }
+            if let shortcut = Shortcut.from(event: event) {
+                Settings.toggleShortcut = shortcut
+                self.stopRecordingShortcut()
+                return nil
+            }
+            NSSound.beep()
+            return nil
+        }
+    }
+
+    private func stopRecordingShortcut() {
+        if let shortcutMonitor {
+            NSEvent.removeMonitor(shortcutMonitor)
+            self.shortcutMonitor = nil
+        }
+        isRecordingShortcut = false
+        updateShortcutControls()
     }
 
     @objc private func loginToggled() {
