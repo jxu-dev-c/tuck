@@ -59,15 +59,17 @@ enum MenuBarItemScanner {
                 bundleID: app.bundleID,
                 title: title,
                 frame: frame,
-                isFixed: isFixed(bundleID: app.bundleID, key: key)
+                isFixed: isFixed(bundleID: app.bundleID, key: key, title: title)
             )
         }
     }
 
-    private static func isFixed(bundleID: String?, key: String) -> Bool {
+    static func isFixed(bundleID: String?, key: String, title: String = "") -> Bool {
         guard bundleID == "com.apple.controlcenter" else { return false }
         let key = key.lowercased()
-        return key.contains("controlcenter") || key.contains("control center") || key.contains("clock")
+        let title = title.lowercased()
+        let fixedTokens = ["bentobox", "controlcenter", "control center", "clock"]
+        return fixedTokens.contains { key.contains($0) || title.contains($0) }
     }
 
     /// The same physical item can be reported by more than one process; keep one per position,
