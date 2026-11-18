@@ -19,10 +19,12 @@ final class MenuBarController {
     /// While > 0 (e.g. Settings is open) the section stays expanded and auto-rehide is suspended.
     private var holdCount = 0
     private var wasCollapsedBeforeHold = false
+    private var outsideClickMonitor: Any?
     private var hasShownGuardAlert = false
 
     private(set) var isCollapsed = false
     var onOpenSettings: (() -> Void)?
+    var isMonitoringOutsideClicks: Bool { outsideClickMonitor != nil }
 
     /// Places the arrow at the far right (just left of the system items) with the divider beside it,
     /// so everything else starts out hidden.
@@ -55,6 +57,9 @@ final class MenuBarController {
         updateArrowImage()
         NotificationCenter.default.addObserver(self, selector: #selector(screenParametersChanged),
             name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(outsideClickSettingChanged),
+            name: Settings.rehideOnOutsideClickDidChangeNotification, object: nil)
+        updateOutsideClickMonitor()
     }
 
     @objc private func screenParametersChanged() {
@@ -99,6 +104,7 @@ final class MenuBarController {
         if holdCount == 0 {
             Settings.isCollapsed = false
         }
+        updateOutsideClickMonitor()
         if autoRehide { scheduleRehide() }
     }
 
@@ -109,6 +115,7 @@ final class MenuBarController {
             showGuardAlert()
             return
         }
+        removeOutsideClickMonitor()
         divider.button?.image = nil
         divider.button?.superview?.isHidden = true
         divider.length = Self.collapsedLength
@@ -124,6 +131,7 @@ final class MenuBarController {
         }
         holdCount += 1
         cancelRehide()
+        removeOutsideClickMonitor()
         expand(autoRehide: false)
     }
 
@@ -135,8 +143,39 @@ final class MenuBarController {
             collapse()
         } else {
             Settings.isCollapsed = false
+            updateOutsideClickMonitor()
             scheduleRehide()
         }
+    }
+
+    @objc private func outsideClickSettingChanged() {
+        updateOutsideClickMonitor()
+    }
+
+    private func updateOutsideClickMonitor() {
+        guard !isCollapsed, holdCount == 0, Settings.rehideOnOutsideClick else {
+            removeOutsideClickMonitor()
+            return
+        }
+        guard outsideClickMonitor == nil else { return }
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.handleOutsideClick()
+            }
+        }
+    }
+
+    private func removeOutsideClickMonitor() {
+        if let outsideClickMonitor {
+            NSEvent.removeMonitor(outsideClickMonitor)
+            self.outsideClickMonitor = nil
+        }
+    }
+
+    func handleOutsideClick() {
+        guard !isCollapsed, holdCount == 0, Settings.rehideOnOutsideClick else { return }
+        guard !shouldDeferRehide() else { return }
+        collapse()
     }
 
     private func dividerIsLeftOfArrow() -> Bool {

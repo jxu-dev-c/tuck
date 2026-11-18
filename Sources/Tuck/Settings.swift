@@ -116,6 +116,7 @@ struct Shortcut: Equatable, Sendable {
 /// Thin wrapper over `UserDefaults`. Everything is computed so there's no cached global state.
 enum Settings {
     static let toggleShortcutDidChangeNotification = Notification.Name("TuckToggleShortcutDidChange")
+    static let rehideOnOutsideClickDidChangeNotification = Notification.Name("TuckRehideOnOutsideClickDidChange")
 
     private static var defaults: UserDefaults { .standard }
 
@@ -124,6 +125,7 @@ enum Settings {
         static let isCollapsed = "isCollapsed"
         static let autoRehideDelay = "autoRehideDelay"
         static let toggleShortcut = "toggleShortcut"
+        static let rehideOnOutsideClick = "rehideOnOutsideClick"
     }
 
     static var hasLaunchedBefore: Bool {
@@ -158,6 +160,15 @@ enum Settings {
                 defaults.removeObject(forKey: Key.toggleShortcut)
             }
             NotificationCenter.default.post(name: toggleShortcutDidChangeNotification, object: nil)
+        }
+    }
+
+    /// Whether clicking outside the menu bar immediately hides revealed items.
+    static var rehideOnOutsideClick: Bool {
+        get { defaults.object(forKey: Key.rehideOnOutsideClick) as? Bool ?? false }
+        set {
+            defaults.set(newValue, forKey: Key.rehideOnOutsideClick)
+            NotificationCenter.default.post(name: rehideOnOutsideClickDidChangeNotification, object: nil)
         }
     }
 }
