@@ -18,6 +18,7 @@ final class MenuBarController {
     private var rehideTimer: Timer?
     /// While > 0 (e.g. Settings is open) the section stays expanded and auto-rehide is suspended.
     private var holdCount = 0
+    private var wasCollapsedBeforeHold = false
     private var hasShownGuardAlert = false
 
     private(set) var isCollapsed = false
@@ -93,8 +94,10 @@ final class MenuBarController {
             divider.button?.superview?.isHidden = false
             divider.button?.image = Self.dividerImage
             isCollapsed = false
-            Settings.isCollapsed = false
             updateArrowImage()
+        }
+        if holdCount == 0 {
+            Settings.isCollapsed = false
         }
         if autoRehide { scheduleRehide() }
     }
@@ -116,14 +119,24 @@ final class MenuBarController {
 
     /// Keeps items revealed until a matching `endHold()`.
     func beginHold() {
+        if holdCount == 0 {
+            wasCollapsedBeforeHold = isCollapsed
+        }
         holdCount += 1
         cancelRehide()
         expand(autoRehide: false)
     }
 
     func endHold() {
-        holdCount = max(0, holdCount - 1)
-        if holdCount == 0 { collapse() }
+        guard holdCount > 0 else { return }
+        holdCount -= 1
+        guard holdCount == 0 else { return }
+        if wasCollapsedBeforeHold {
+            collapse()
+        } else {
+            Settings.isCollapsed = false
+            scheduleRehide()
+        }
     }
 
     private func dividerIsLeftOfArrow() -> Bool {
