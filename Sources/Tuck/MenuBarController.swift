@@ -174,8 +174,24 @@ final class MenuBarController {
         guard let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
             return false
         }
+        return Self.hasOpenMenuOrPopover(in: windows)
+    }
+
+    static func hasOpenMenuOrPopover(in windows: [[String: Any]]) -> Bool {
         let menuLevel = Int(CGWindowLevelForKey(.popUpMenuWindow))
-        return windows.contains { ($0[kCGWindowLayer as String] as? Int) == menuLevel }
+        let statusLevel = Int(CGWindowLevelForKey(.statusWindow))
+        return windows.contains { window in
+            guard let layer = window[kCGWindowLayer as String] as? Int else { return false }
+            if layer == menuLevel { return true }
+            // Status-item popovers (NSPopover) are presented at kCGStatusWindowLevel (25) and extend
+            // below the menu bar strip, whereas regular status item tiles are <= menu bar height.
+            if layer == statusLevel,
+               let boundsDict = window[kCGWindowBounds as String] as? NSDictionary,
+               let bounds = CGRect(dictionaryRepresentation: boundsDict) {
+                return bounds.height > 50
+            }
+            return false
+        }
     }
 
     // MARK: Arrow
