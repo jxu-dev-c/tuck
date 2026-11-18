@@ -4,7 +4,7 @@ import ServiceManagement
 /// Settings: lists menu bar items under Shown / Hidden and moves them on drag and drop.
 /// Built in code (no nib). Created on demand and released on close.
 @MainActor
-final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate {
+final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate, NSMenuDelegate {
     private enum Section: CaseIterable {
         case shown, hidden
 
@@ -37,7 +37,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTa
     private let menuBar: MenuBarController
     private let onClose: () -> Void
 
-    private let table = NSTableView()
+    private let table = ItemTableView()
     private let statusLabel = NSTextField(labelWithString: "")
     private let refreshButton = NSButton(title: "Refresh", target: nil, action: nil)
     private let rehidePopup = NSPopUpButton()
@@ -132,7 +132,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTa
         guard let contentView = window?.contentView else { return }
 
         let title = Self.boldLabel("Menu bar items")
-        let hint = NSTextField(wrappingLabelWithString: "Listed left to right. Drag an item between Shown and Hidden and Tuck moves the real icon. You can also ⌘-drag icons past the │ divider in the menu bar.")
+        let hint = NSTextField(wrappingLabelWithString: "Listed left to right. Drag, double-click, or press Return/Space on an item to move it between Shown and Hidden. You can also ⌘-drag icons past the │ divider in the menu bar.")
         hint.textColor = .secondaryLabelColor
         hint.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
 
@@ -144,6 +144,12 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTa
         table.usesAutomaticRowHeights = false
         table.dataSource = self
         table.delegate = self
+        table.target = self
+        table.doubleAction = #selector(rowDoubleClicked)
+        table.onActivateRow = { [weak self] row in self?.toggleSection(forRow: row) }
+        let contextMenu = NSMenu()
+        contextMenu.delegate = self
+        table.menu = contextMenu
         table.registerForDraggedTypes([Self.dragType])
         table.setDraggingSourceOperationMask(.move, forLocal: true)
         table.draggingDestinationFeedbackStyle = .gap
@@ -520,5 +526,48 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate, NSTa
             label.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
         ])
         return cell
+    }
+
+    // MARK: Keyboard, Double-Click & Context Menu Actions
+
+    func toggleSection(forRow row: Int) {
+        guard !isClosing, !isBusy, row >= 0, row < rows.count,
+              case .item(let item, let section) = rows[row] else { return }
+        let target: Section = section == .shown ? .hidden : .shown
+        move(item, to: target, index: items(in: target).count)
+    }
+
+    @objc private func rowDoubleClicked() {
+        let row = table.clickedRow >= 0 ? table.clickedRow : table.selectedRow
+        toggleSection(forRow: row)
+    }
+
+    @objc private func contextMenuMoveItem(_ sender: NSMenuItem) {
+        toggleSection(forRow: sender.tag)
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
+        let row = table.clickedRow >= 0 ? table.clickedRow : table.selectedRow
+        guard !isBusy, row >= 0, row < rows.count,
+              case .item(_, let section) = rows[row] else { return }
+        let title = section == .shown ? "Hide Item" : "Show Item"
+        let item = NSMenuItem(title: title, action: #selector(contextMenuMoveItem(_:)), keyEquivalent: "")
+        item.target = self
+        item.tag = row
+        menu.addItem(item)
+    }
+}
+
+private final class ItemTableView: NSTableView {
+    var onActivateRow: ((Int) -> Void)?
+
+    override func keyDown(with event: NSEvent) {
+        let modifiers = event.modifierFlags.intersection([.command, .option, .control])
+        if modifiers.isEmpty, [36, 76, 49].contains(event.keyCode), selectedRow >= 0 {
+            onActivateRow?(selectedRow)
+            return
+        }
+        super.keyDown(with: event)
     }
 }
